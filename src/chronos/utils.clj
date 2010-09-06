@@ -5,19 +5,24 @@
   (:use clojure.contrib.except
 	[clojure.contrib.def :only (defvar)]))
 
-(defn seq2map
-  "Convert a sequence to a map"
+(defn ensure-key-params
+  "Makes sure the arguments are keys - (:a 1 :b 2)"
   [key-vals]
   (->> key-vals
        (map (fn [[key val]]
 	      [(keyword key) val]))
-       flatten
-       (apply hash-map)))
+       (apply concat)))
 
-(defn make-instance
-  "Make an instance of a class with the given parameters"
-  [cname params]
-  (eval (conj (list* params) cname 'new)))
+(defmacro make-instance
+  "Creates an instance of a record based on the passed arguments and the default arguments"
+  [cname fields user-vals default-vals]
+  `(let [user-map# (apply hash-map ~user-vals)
+	 default-map# (apply hash-map ~default-vals)
+	 record-vals# (list*
+		       (for [rawkey# '~fields]
+			 (let [key# (keyword rawkey#)]
+			   (get user-map# key# (default-map# key#)))))]
+     (eval (conj record-vals# ~cname 'new))))
 
 (defmacro defrecord+
   "Defines a new record, along with a make-RecordName factory function that
@@ -33,23 +38,22 @@
 		   slot
 		   (list slot nil)))
 	fields (->> slots+ (map first) vec)
-        default-map (seq2map slots+)]
+        default-vals (ensure-key-params slots+)]
     `(do
        ;;Create the record with the given name and fields
        (defrecord ~name
          ~fields
          ~@etc)
 
-       ;;Define the constructor function
-       (defn ~(symbol (str "make-" name))
+       ;;Define the constructor macro
+       (defmacro ~(symbol (str "make-" name))
          ~(str "A factory function returning a new instance of " name
 	       " initialized with the defaults specified in the corresponding defrecord+ form.")
-         [& body#]
-	 (let [user-map# (seq2map (partition 2 body#))
-	       record-vals# (for [rawkey# '~fields]
-			      (let [key# (keyword rawkey#)]
-				(get user-map# key# (~default-map key#))))]
-	    (make-instance ~name record-vals#)))
+         [& user-vals#]
+	 (let [name# ~name
+	       fields# '~fields
+	       default-vals# '~default-vals]
+	   `(make-instance ~name# ~fields# '~user-vals# '~default-vals#)))
        ~name)))
 
 (defmacro defrecord+id
@@ -65,15 +69,15 @@
        ;;Create the counter variable
        (defvar ~(symbol (str name "-counter")) (atom 0)
 	 ~(str "Keep count of the number of " name "s created"))
-       
+
        ;;Create the specialized constructor
-       (defn ~(symbol (str "make-" name "+id"))
+       (defmacro ~(symbol (str "make-" name "+id"))
 	 ~(str "A factory function returning a new instance of " name
 	       " initialized with the defaults specified in the corresponding defrecord+ form.")
-	 [& body#]
-	 (let [id# @~(symbol (str name "-counter"))
-	       body+# (conj (list* body#) id# :id)
-	       record# (apply ~(symbol (str "make-" name)) body+#)]	 
+	 [& user-vals#]
+	 (let [id# (deref ~(symbol (str name "-counter")))
+	       user-vals+# (conj (list* user-vals#) id# :id)
+	       record# (conj user-vals+# '~(symbol (str "make-" name)))]
 	   (swap! ~(symbol (str name "-counter")) inc)
 	   record#))
        ~name)))

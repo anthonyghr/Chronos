@@ -23,13 +23,6 @@
    (weight 0)
    constraint])
 
-;;--------------------------begin node----------------------------------------
-
-(defrecord+id node
-  [in-edges out-edges
-   (lb beginning-of-time) lb-pred lb-potential-preds lb-succs
-   (ub end-of-time) ub-pred ub-potential-preds ub-succs])
-
 ;;--------------------------begin constraint-----------------------------------
 
 (defrecord+id constraint
@@ -38,18 +31,44 @@
    from-node to-node
    forward-edge backward-edge])
 
+
+;;--------------------------begin node----------------------------------------
+
+(defrecord+id node
+  [;;Edges going into and out of the node
+   (in-edges (ref #{}))
+   (out-edges (ref #{}))
+
+   ;;The lower bound
+   (lb (ref beginning-of-time))
+   ;;The prececessor node and edge
+   (lb-pred (ref nil))
+   (lb-pred-edge (ref nil))
+   ;;The successor nodes
+   (lb-succs (ref #{}))
+
+   ;;The upper bound
+   (ub (ref end-of-time))
+   ;;The predecessor node and edge
+   (ub-pred (ref nil))
+   (ub-pred-edge (ref nil))
+   ;;The successor nodes
+   (ub-succs (ref #{}))])
+
+
 ;;--------------------------begin activity-------------------------------------
 
 (defrecord+id activity
-  [source-node finish-node])
+  [(source-node (make-node+id))
+   (finish-node (make-node+id))])
 
 ;;--------------------------begin stn------------------------------------------
 
 (defrecord+ stn
-  [propagation-mode
-   tz-node
-   nodes
-   constraints])
+  [(propagation-mode (ref :incremental))
+   (tz-node (ref (make-node+id :lb (ref beginning-of-time) :ub (ref beginning-of-time))))
+   (nodes (ref {}))
+   (constraints (ref {}))])
 
 (defn propagate-sssp
   "Propagate effect of constraints using modified Bellman-Ford algorithm"
